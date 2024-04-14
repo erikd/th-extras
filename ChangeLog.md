@@ -1,5 +1,10 @@
 # Revision history for th-extras
 
+## 0.0.0.8 - 2024-04-14
+
+* Allow th-abstraction-0.7
+* New package maintainer
+
 ## 0.0.0.7 - 2023-12-15
 
 * Support GHC 9.6 and 9.8
