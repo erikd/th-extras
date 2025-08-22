@@ -1,0 +1,12 @@
+packages:
+  ./
+
+-- Build all tests by default
+tests: True
+
+-- Show test output by default
+test-show-details: direct
+
+if impl (ghc >= 9.14)
+  allow-newer:
+    , th-abstraction:template-haskell
