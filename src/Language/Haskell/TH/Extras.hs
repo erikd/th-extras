@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP, TemplateHaskell #-}
+
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 module Language.Haskell.TH.Extras where
 
 import Control.Monad
@@ -7,7 +10,9 @@ import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Language.Haskell.TH
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 914
 import Language.Haskell.TH.Syntax
+#endif
 import Language.Haskell.TH.Datatype.TyVarBndr
 
 intIs64 :: Bool
@@ -191,6 +196,7 @@ substVarsWith topVars resultType argType = subst Set.empty argType
       TupleT k -> TupleT k
       ArrowT -> ArrowT
       ListT -> ListT
+      UnboxedTupleT k -> UnboxedTupleT k
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
       InfixT t1 x t2 -> InfixT (subst bs t1) x (subst bs t2)
       ParensT t -> ParensT (subst bs t)
@@ -212,14 +218,20 @@ substVarsWith topVars resultType argType = subst Set.empty argType
       PromotedTupleT k -> PromotedTupleT k
       StarT -> StarT
 #endif
-      UnboxedTupleT k -> UnboxedTupleT k
-
+#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
       PromotedInfixT t1 x t2 -> PromotedInfixT (subst bs t1) x (subst bs t2)
       PromotedUInfixT t1 x t2 -> PromotedUInfixT (subst bs t1) x (subst bs t2)
+#endif
+#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
       MulArrowT -> MulArrowT
-      AppKindT f x -> AppKindT (subst bs f) (subst bs x)
-      ImplicitParamT s t -> ImplicitParamT s (subst bs t)
+#endif
+#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
       ForallVisT xs t -> ForallVisT xs (subst bs t)
+#endif
+#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 808
+      ImplicitParamT s t -> ImplicitParamT s (subst bs t)
+      AppKindT f x -> AppKindT (subst bs f) (subst bs x)
+#endif
 
     findVar v (tv:_) (AppT _ (VarT v')) | v == v' = tv
     findVar v (_:tvs) (AppT t (VarT _)) = findVar v tvs t

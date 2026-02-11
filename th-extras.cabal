@@ -42,6 +42,7 @@ source-repository head
 
 Library
   hs-source-dirs:       src
+  ghc-options:          -Wall
   exposed-modules:      Language.Haskell.TH.Extras
   build-depends:        base >= 4.9 && < 5
                       , containers < 0.9
