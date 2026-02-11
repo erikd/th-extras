@@ -179,13 +179,9 @@ substVarsWith topVars resultType argType = subst Set.empty argType
       -- Several of the following cases could all be covered by an "x -> x" case, but
       -- I'd rather know if new cases need to be handled specially in future versions
       -- of Template Haskell.
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 710
-      ForallT bndrs cxt t ->
+      ForallT bndrs cxt1 t ->
         let bs' = Set.union bs (Set.fromList (map tvName bndrs))
-        in ForallT bndrs (map (subst bs') cxt) (subst bs' t)
-#else
-      ForallT {} -> error "substVarsWith: ForallT substitutions have not been implemented for GHCs prior to 7.10"
-#endif
+        in ForallT bndrs (map (subst bs') cxt1) (subst bs' t)
       AppT f x -> AppT (subst bs f) (subst bs x)
       SigT t k -> SigT (subst bs t) k
       VarT v -> if Set.member v bs
@@ -216,9 +212,15 @@ substVarsWith topVars resultType argType = subst Set.empty argType
       PromotedTupleT k -> PromotedTupleT k
       StarT -> StarT
 #endif
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ > 700
       UnboxedTupleT k -> UnboxedTupleT k
-#endif
+
+      PromotedInfixT t1 x t2 -> PromotedInfixT (subst bs t1) x (subst bs t2)
+      PromotedUInfixT t1 x t2 -> PromotedUInfixT (subst bs t1) x (subst bs t2)
+      MulArrowT -> MulArrowT
+      AppKindT f x -> AppKindT (subst bs f) (subst bs x)
+      ImplicitParamT s t -> ImplicitParamT s (subst bs t)
+      ForallVisT xs t -> ForallVisT xs (subst bs t)
+
     findVar v (tv:_) (AppT _ (VarT v')) | v == v' = tv
     findVar v (_:tvs) (AppT t (VarT _)) = findVar v tvs t
     findVar v _ _ = error $ "substVarsWith: couldn't look up variable substitution for " ++ show v
@@ -227,11 +229,6 @@ substVarsWith topVars resultType argType = subst Set.empty argType
 -- | Determine the arity of a kind.
 -- Starting in template-haskell 2.8.0.0, 'Kind' and 'Type' became synonymous.
 kindArity :: Kind -> Int
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 706
-kindArity k = case k of
-  StarK -> 0
-  ArrowK _ k2 -> 1 + kindArity k2
-#else
 kindArity k = case k of
   ForallT _ _ t -> kindArity t
   AppT (AppT ArrowT _) t -> 1 + kindArity t
@@ -240,7 +237,6 @@ kindArity k = case k of
   ParensT t -> kindArity t
 #endif
   _ -> 0
-#endif
 
 -- | Given the name of a type constructor, determine its full arity
 tyConArity :: Name -> Q Int
@@ -260,26 +256,16 @@ tyConArity' :: Name -> Q ([TyVarBndr BndrVis], Int)
 tyConArity' n = do
   r <- reify n
   return $ case r of
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
     TyConI (DataD _ _ ts mk _ _) -> (ts, fromMaybe 0 (fmap kindArity mk))
     TyConI (NewtypeD _ _ ts mk _ _) -> (ts, fromMaybe 0 (fmap kindArity mk))
-#else
-    TyConI (DataD _ _ ts _ _) -> (ts, 0)
-    TyConI (NewtypeD _ _ ts _ _) -> (ts, 0)
-#endif
     _ -> error $ "tyConArity': Supplied name reified to something other than a data declaration: " ++ show n
 
 -- | Determine the constructors bound by a data or newtype declaration. Errors out if supplied with another
 -- sort of declaration.
 decCons :: Dec -> [Con]
 decCons d = case d of
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
   DataD _ _ _ _ cs _ -> cs
   NewtypeD _ _ _ _ c _ -> [c]
-#else
-  DataD _ _ _ cs _ -> cs
-  NewtypeD _ _ _ c _ -> [c]
-#endif
   _ -> error "decCons: Declaration found was not a data or newtype declaration."
 
 -- | Determine the arity of a data constructor.
@@ -289,7 +275,5 @@ conArity c = case c of
   RecC _ ts -> length ts
   InfixC _ _ _ -> 2
   ForallC _ _ c' -> conArity c'
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
   GadtC _ ts _ -> length ts
   RecGadtC _ ts _ -> length ts
-#endif
