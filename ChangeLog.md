@@ -1,5 +1,9 @@
 # Revision history for th-extras
 
+## 0.0.0.9 - 2026-02-11
+
+* Support a bunch of new Type constructors in `substVarsWith`.
+
 ## 0.0.0.8 - 2024-04-14
 
 * Allow th-abstraction-0.7
