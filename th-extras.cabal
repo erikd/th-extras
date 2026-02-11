@@ -19,8 +19,9 @@ description:            A grab bag of functions for use with Template Haskell.
                         providing high-level operations and making sure they work on as many
                         versions of Template Haskell as I can.
 tested-with:
+                        GHC == 9.14.1
                         GHC == 9.12.2
-                        GHC == 9.10.2
+                        GHC == 9.10.3
                         GHC == 9.8.4
                         GHC == 9.6.7
                         GHC == 9.4.8
@@ -42,6 +43,7 @@ source-repository head
 
 Library
   hs-source-dirs:       src
+  ghc-options:          -Wall
   exposed-modules:      Language.Haskell.TH.Extras
   build-depends:        base >= 4.9 && < 5
                       , containers < 0.9
