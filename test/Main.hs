@@ -18,6 +18,7 @@ main =
         , ("prop_substVarsWith", prop_substVarsWith)
         , ("prop_headOfType", prop_headOfType)
         , ("prop_kindArity", prop_kindArity)
+        , ("prop_substVarsWith_refined", prop_substVarsWith_refined)
         ]
     ]
 
@@ -39,10 +40,20 @@ prop_namesBoundInPat = withTests 1000 . property $ do
 -- no free variable is missed and no substituted variable is captured by a
 -- binder in the argument type.
 prop_substVarsWith :: Property
-prop_substVarsWith = withTests 1000 . property $ do
-  sc <- forAll genSubstCase
+prop_substVarsWith = withTests 1000 . property $ checkSubstCase =<< forAll genSubstCase
+
+-- | As 'prop_substVarsWith', but for GADT constructors whose result type refines
+-- some of the type constructor's parameters to concrete types.
+prop_substVarsWith_refined :: Property
+prop_substVarsWith_refined = withTests 1000 . property $ checkSubstCase =<< forAll genRefinedSubstCase
+
+checkSubstCase :: SubstCase -> PropertyT IO ()
+checkSubstCase sc = do
   let result = substVarsWith (scTopVars sc) (scResultType sc) (scArgType sc)
       rename v = Map.findWithDefault v v (scExpected sc)
+  -- Force the whole result here, so that an 'error' call is reported as a
+  -- failure of this property rather than escaping from 'annotateShow'.
+  _ <- eval (length (show result))
   annotateShow result
   freeVars result === Set.map rename (freeVars (scArgType sc))
 

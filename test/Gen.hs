@@ -11,6 +11,7 @@ module Gen
   , patVars
   , SubstCase (..)
   , genSubstCase
+  , genRefinedSubstCase
   , genHeadedType
   , genKindWithArity
   ) where
@@ -205,19 +206,33 @@ data SubstCase = SubstCase
 -- variables @v_1 ... v_(n-1)@ drawn from a pool that overlaps the argument
 -- type's variable names, so that substituted names can clash with binders.
 genSubstCase :: Gen SubstCase
-genSubstCase = do
+genSubstCase = genSubstCaseWith (Range.singleton 0)
+
+-- | Like 'genSubstCase', but some of the parameters @x_i@ of the result type are
+-- refined to concrete types, as a GADT constructor's result type can be, e.g.
+-- @C :: T Int b i@.
+genRefinedSubstCase :: Gen SubstCase
+genRefinedSubstCase = genSubstCaseWith (Range.linear 1 3)
+
+-- | The range is the number of parameters of the result type that are refined
+-- to concrete types rather than being variables.
+genSubstCaseWith :: Range.Range Int -> Gen SubstCase
+genSubstCaseWith refined = do
   argType <- genType
   extra <- genSmallList genVarName
-  params <- Gen.shuffle (nub (Set.toList (freeVars argType) ++ extra))
-  pool <- Gen.shuffle (map mkName ["a", "b", "c", "x", "y", "p", "q"])
+  nRefined <- Gen.int refined
+  concrete <- Gen.list (Range.singleton nRefined) (ConT <$> Gen.element (map mkName ["Int", "Bool"]))
+  params <- Gen.shuffle
+    (map Right (nub (Set.toList (freeVars argType) ++ extra)) ++ map Left concrete)
+  pool <- Gen.shuffle (map mkName ["a", "b", "c", "x", "y", "p", "q", "r", "s", "t"])
   let topVars = take (length params) pool
       resultType =
-        AppT (foldl AppT (ConT (mkName "T")) (map VarT params)) (VarT (mkName "i"))
+        AppT (foldl AppT (ConT (mkName "T")) (map (either id VarT) params)) (VarT (mkName "i"))
   pure SubstCase
     { scTopVars = topVars
     , scResultType = resultType
     , scArgType = argType
-    , scExpected = Map.fromList (zip params topVars)
+    , scExpected = Map.fromList [ (x, v) | (Right x, v) <- zip params topVars ]
     }
 
 -- | Generates a type together with the name at its head: a head type wrapped in
