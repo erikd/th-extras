@@ -17,6 +17,7 @@ module Gen
   , genHeadedType
   , genBuiltinHeadedType
   , genUnresolvedHeadedType
+  , typeHead
   , genKindWithArity
   , genKindWithArityAnyArrow
   , genDec
@@ -604,3 +605,56 @@ conInfo con = case con of
   ForallC bndrs _ c -> let ci = conInfo c in ci { ciBinders = map tvName bndrs ++ ciBinders ci }
   GadtC ns args _ -> ConInfo ns (map snd args) []
   RecGadtC ns fields _ -> ConInfo ns [ t | (_, _, t) <- fields ] []
+
+-- | Reference implementation: the name of the type constructor (or variable)
+-- at the head of a type, if it has one. Type-level literals, wildcards and
+-- implicit parameters have none, and nor does a chain of unresolved infix
+-- applications whose operators differ, since its head depends on fixities.
+typeHead :: Type -> Maybe Name
+typeHead ty = case ty of
+  ForallT _ _ t -> typeHead t
+  AppT f _ -> typeHead f
+  SigT t _ -> typeHead t
+  ParensT t -> typeHead t
+  VarT n -> Just n
+  ConT n -> Just n
+  PromotedT n -> Just n
+  TupleT k -> Just (tupleTypeName k)
+  UnboxedTupleT k -> Just (unboxedTupleTypeName k)
+  UnboxedSumT k -> Just (unboxedSumTypeName k)
+  PromotedTupleT k -> Just (tupleDataName k)
+  ArrowT -> Just ''(->)
+  ListT -> Just ''[]
+  PromotedNilT -> Just '[]
+  PromotedConsT -> Just '(:)
+  StarT -> Just ''Kind.Type
+  ConstraintT -> Just ''Kind.Constraint
+  InfixT _ n _ -> Just n
+  UInfixT {} -> sameOperator (unresolvedOperators ty)
+#if MIN_VERSION_template_haskell(2,15,0)
+  AppKindT t _ -> typeHead t
+#endif
+#if MIN_VERSION_template_haskell(2,16,0)
+  ForallVisT _ t -> typeHead t
+#endif
+#if MIN_VERSION_template_haskell(2,17,0)
+  MulArrowT -> Just ''FUN
+#endif
+#if MIN_VERSION_template_haskell(2,19,0)
+  EqualityT -> Just ''(~)
+  PromotedInfixT _ n _ -> Just n
+  PromotedUInfixT {} -> sameOperator (unresolvedOperators ty)
+#endif
+  -- LitT, WildCardT, ImplicitParamT, and EqualityT before template-haskell 2.19.
+  _ -> Nothing
+  where
+    sameOperator ops = case ops of
+      op : rest | all (== op) rest -> Just op
+      _ -> Nothing
+
+    unresolvedOperators t = case t of
+      UInfixT l n r -> unresolvedOperators l ++ [n] ++ unresolvedOperators r
+#if MIN_VERSION_template_haskell(2,19,0)
+      PromotedUInfixT l n r -> unresolvedOperators l ++ [n] ++ unresolvedOperators r
+#endif
+      _ -> []

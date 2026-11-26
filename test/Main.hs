@@ -1,9 +1,10 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TemplateHaskell #-}
 
 module Main (main) where
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Control.Exception (ErrorCall, evaluate, try)
 import Control.Monad (forM_)
 import Fixtures (arityCases)
 import Gen
@@ -33,6 +34,7 @@ main =
         , ("prop_substVarsWith_wrapped", prop_substVarsWith_wrapped)
         , ("prop_kindArity_anyArrow", prop_kindArity_anyArrow)
         , ("prop_headOfType_unresolved", prop_headOfType_unresolved)
+        , ("prop_headOfType_any", prop_headOfType_any)
         ]
     ]
 
@@ -172,3 +174,16 @@ prop_headOfType_unresolved = withTests 1000 . property $ do
   (ty, name) <- forAll genUnresolvedHeadedType
   result <- eval (headOfType ty)
   result === name
+
+-- | On arbitrary types, 'headOfType' returns the head wherever the type has one,
+-- and calls 'error' (rather than returning something wrong) wherever it does
+-- not.
+prop_headOfType_any :: Property
+prop_headOfType_any = withTests 2000 . property $ do
+  ty <- forAll genType
+  result <- evalIO (try (evaluate (headOfType ty)))
+  classify "has a head" (typeHead ty /= Nothing)
+  classify "has no head" (typeHead ty == Nothing)
+  case result of
+    Left (_ :: ErrorCall) -> typeHead ty === Nothing
+    Right name -> Just name === typeHead ty
