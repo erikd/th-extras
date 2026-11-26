@@ -54,7 +54,8 @@ test-suite test
   type:                 exitcode-stdio-1.0
   hs-source-dirs:       test
   main-is:              Main.hs
-  other-modules:        Gen
+  other-modules:        Fixtures
+                      , Gen
   ghc-options:          -Wall -threaded
   build-depends:        base >= 4.11 && < 5
                       , containers

@@ -1,9 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
 module Main (main) where
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Control.Monad (forM_)
+import Fixtures (arityCases)
 import Gen
 import Hedgehog
 import Hedgehog.Main (defaultMain)
@@ -24,6 +26,7 @@ main =
         , ("prop_genericalizeDecs", prop_genericalizeDecs)
         , ("prop_headOfType_builtin", prop_headOfType_builtin)
         , ("prop_substVarsWith_existential", prop_substVarsWith_existential)
+        , ("prop_tyConArity", prop_tyConArity)
         ]
     ]
 
@@ -109,3 +112,12 @@ prop_headOfType_builtin :: Property
 prop_headOfType_builtin = withTests 1000 . property $ do
   (ty, name) <- forAll genBuiltinHeadedType
   headOfType ty === name
+
+-- | 'tyConArity' gives the number of type arguments a data type or newtype
+-- takes, however its parameters are declared: binders, kind signatures,
+-- standalone kind signatures or @type data@. The arities are computed at
+-- compile time by reifying the declarations in "Fixtures".
+prop_tyConArity :: Property
+prop_tyConArity = withTests 1 . property $
+  forM_ ($(arityCases) :: [(String, Either String Int, Int)]) $ \(name, result, expected) ->
+    (name, result) === (name, Right expected)
