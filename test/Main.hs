@@ -32,6 +32,7 @@ main =
         , ("prop_conAccessors", prop_conAccessors)
         , ("prop_substVarsWith_wrapped", prop_substVarsWith_wrapped)
         , ("prop_kindArity_anyArrow", prop_kindArity_anyArrow)
+        , ("prop_headOfType_unresolved", prop_headOfType_unresolved)
         ]
     ]
 
@@ -162,3 +163,12 @@ prop_kindArity_anyArrow :: Property
 prop_kindArity_anyArrow = withTests 1000 . property $ do
   (k, n) <- forAll genKindWithArityAnyArrow
   kindArity k === n
+
+-- | 'headOfType' finds the operator at the head of a chain of unresolved infix
+-- applications when every operator in the chain is the same, since the head
+-- is then that operator whatever its fixity.
+prop_headOfType_unresolved :: Property
+prop_headOfType_unresolved = withTests 1000 . property $ do
+  (ty, name) <- forAll genUnresolvedHeadedType
+  result <- eval (headOfType ty)
+  result === name
