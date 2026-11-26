@@ -1,5 +1,5 @@
 # th-extras
-[![Haskell](https://img.shields.io/badge/language-Haskell-orange.svg)](https://haskell.org) [![Hackage](https://img.shields.io/hackage/v/th-extras.svg)](https://hackage.haskell.org/package/th-extras) [![Hackage CI](https://matrix.hackage.haskell.org/api/v2/packages/th-extras/badge)](https://matrix.hackage.haskell.org/#/package/th-extras) [![Github CI](https://github.com/mokus0/th-extras/workflows/github-action/badge.svg)](https://github.com/mokus0/th-extras/actions) [![BSD3 License](https://img.shields.io/badge/license-BSD3-blue.svg)](https://github.com/mokus0/th-extras/blob/master/LICENSE)
+[![Haskell](https://img.shields.io/badge/language-Haskell-orange.svg)](https://haskell.org) [![Hackage](https://img.shields.io/hackage/v/th-extras.svg)](https://hackage.haskell.org/package/th-extras) [![Hackage CI](https://matrix.hackage.haskell.org/api/v2/packages/th-extras/badge)](https://matrix.hackage.haskell.org/#/package/th-extras) [![Github CI](https://github.com/erikd/th-extras/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/erikd/th-extras/actions/workflows/haskell-ci.yml) [![Public Domain](https://img.shields.io/badge/license-Public%20Domain-blue.svg)](https://github.com/erikd/th-extras/blob/master/th-extras.cabal)
 
 A grab bag of useful functions for use with Template Haskell.
 
