@@ -314,7 +314,7 @@ tyConArity n = do
 -- | Given the name of a type constructor, determine a list of type variables bound as parameters by
 -- its declaration, and the arity of the kind of type being defined (i.e. how many more arguments would
 -- need to be supplied in addition to the bound parameters in order to obtain an ordinary type of kind *).
--- If the supplied 'Name' is anything other than a data or newtype, produces an error.
+-- If the supplied 'Name' is anything other than a data, newtype or @type data@ declaration, produces an error.
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 908
 tyConArity' :: Name -> Q ([TyVarBndrUnit], Int)
 #else
@@ -325,6 +325,9 @@ tyConArity' n = do
   return $ case r of
     TyConI (DataD _ _ ts mk _ _) -> (ts, fromMaybe 0 (fmap kindArity mk))
     TyConI (NewtypeD _ _ ts mk _ _) -> (ts, fromMaybe 0 (fmap kindArity mk))
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 906
+    TyConI (TypeDataD _ ts mk _) -> (ts, fromMaybe 0 (fmap kindArity mk))
+#endif
     _ -> error $ "tyConArity': Supplied name reified to something other than a data declaration: " ++ show n
 
 -- | Determine the constructors bound by a data or newtype declaration. Errors out if supplied with another
