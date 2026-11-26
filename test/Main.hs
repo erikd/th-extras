@@ -16,6 +16,7 @@ main =
         [ ("prop_occursInType", prop_occursInType)
         , ("prop_namesBoundInPat", prop_namesBoundInPat)
         , ("prop_substVarsWith", prop_substVarsWith)
+        , ("prop_headOfType", prop_headOfType)
         ]
     ]
 
@@ -43,3 +44,10 @@ prop_substVarsWith = withTests 1000 . property $ do
       rename v = Map.findWithDefault v v (scExpected sc)
   annotateShow result
   freeVars result === Set.map rename (freeVars (scArgType sc))
+
+-- | 'headOfType' sees through applications, parentheses, kind signatures,
+-- foralls and kind applications to the name at the head of a type.
+prop_headOfType :: Property
+prop_headOfType = withTests 1000 . property $ do
+  (ty, name) <- forAll genHeadedType
+  headOfType ty === name

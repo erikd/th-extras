@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, TemplateHaskellQuotes #-}
 
 -- | Hedgehog generators for Template Haskell syntax, plus independent reference
 -- implementations used as oracles by the properties in "Main".
@@ -11,6 +11,7 @@ module Gen
   , patVars
   , SubstCase (..)
   , genSubstCase
+  , genHeadedType
   ) where
 
 import Data.List (nub)
@@ -217,3 +218,42 @@ genSubstCase = do
     , scArgType = argType
     , scExpected = Map.fromList (zip params topVars)
     }
+
+-- | Generates a type together with the name at its head: a head type wrapped in
+-- any number of applications, parentheses, kind signatures, foralls and kind
+-- applications, none of which change the head.
+genHeadedType :: Gen (Type, Name)
+genHeadedType = do
+  (ty0, name) <- genHead
+  layers <- Gen.list (Range.linear 0 5) genLayer
+  ty <- foldr (=<<) (pure ty0) layers
+  pure (ty, name)
+  where
+    genHead :: Gen (Type, Name)
+    genHead = Gen.choice
+      [ (\n -> (ConT n, n)) <$> genConName
+      , (\n -> (VarT n, n)) <$> genVarName
+      , (\n -> (PromotedT n, n)) <$> genConName
+      , (\k -> (TupleT k, tupleTypeName k)) <$> Gen.int (Range.linear 0 3)
+      , (\k -> (UnboxedTupleT k, unboxedTupleTypeName k)) <$> Gen.int (Range.linear 0 3)
+      , pure (ListT, ''[])
+      , pure (ArrowT, ''(->))
+      , (\l r -> (InfixT l (mkName "+") r, mkName "+")) <$> Gen.small genType <*> Gen.small genType
+#if MIN_VERSION_template_haskell(2,19,0)
+      , (\l r -> (PromotedInfixT l (mkName ":+") r, mkName ":+")) <$> Gen.small genType <*> Gen.small genType
+#endif
+      ]
+
+    genLayer :: Gen (Type -> Gen Type)
+    genLayer = Gen.element
+      [ \t -> AppT t <$> Gen.small genType
+      , \t -> pure (ParensT t)
+      , \t -> SigT t <$> Gen.small genType
+      , \t -> (\bndrs -> ForallT bndrs [] t) <$> genSmallList genBndrSpec
+#if MIN_VERSION_template_haskell(2,15,0)
+      , \t -> AppKindT t <$> Gen.small genType
+#endif
+#if MIN_VERSION_template_haskell(2,16,0)
+      , \t -> (\bndrs -> ForallVisT bndrs t) <$> genSmallList genBndrUnit
+#endif
+      ]
