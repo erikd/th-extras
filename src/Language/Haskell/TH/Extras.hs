@@ -330,13 +330,18 @@ tyConArity' n = do
 #endif
     _ -> error $ "tyConArity': Supplied name reified to something other than a data declaration: " ++ show n
 
--- | Determine the constructors bound by a data or newtype declaration. Errors out if supplied with another
--- sort of declaration.
+-- | Determine the constructors bound by a data, newtype or @type data@ declaration, or a data or newtype
+-- instance. Errors out if supplied with another sort of declaration.
 decCons :: Dec -> [Con]
 decCons d = case d of
   DataD _ _ _ _ cs _ -> cs
   NewtypeD _ _ _ _ c _ -> [c]
-  _ -> error "decCons: Declaration found was not a data or newtype declaration."
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 906
+  TypeDataD _ _ _ cs -> cs
+#endif
+  DataInstD _ _ _ _ cs _ -> cs
+  NewtypeInstD _ _ _ _ c _ -> [c]
+  _ -> error "decCons: Declaration found was not a data, newtype or type data declaration, or a data or newtype instance."
 
 -- | Determine the arity of a data constructor.
 conArity :: Con -> Int
