@@ -35,12 +35,10 @@ nameOfCon (NormalC  name _) = name
 nameOfCon (RecC     name _) = name
 nameOfCon (InfixC _ name _) = name
 nameOfCon (ForallC _ _ con) = nameOfCon con
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
 nameOfCon (GadtC [name] _ _)    = name
 nameOfCon (GadtC _ _ _)    = error $ "nameOfCon: GadtC: only single constructor names are supported"
 nameOfCon (RecGadtC [name] _ _) = name
 nameOfCon (RecGadtC _ _ _)    = error $ "nameOfCon: RecGadtC: only single constructor names are supported"
-#endif
 
 -- |WARNING: discards binders in GADTs and existentially-quantified constructors
 argTypesOfCon :: Con -> [Type]
@@ -48,10 +46,8 @@ argTypesOfCon (NormalC  _ args) = map snd args
 argTypesOfCon (RecC     _ args) = [t | (_,_,t) <- args]
 argTypesOfCon (InfixC x _ y)    = map snd [x,y]
 argTypesOfCon (ForallC _ _ con) = argTypesOfCon con
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
 argTypesOfCon (GadtC _ args _)    = map snd args
 argTypesOfCon (RecGadtC _ args _) = [t | (_,_,t) <- args]
-#endif
 
 nameOfBinder :: TyVarBndr_ a -> Name
 nameOfBinder = tvName
@@ -84,26 +80,15 @@ namesBoundInDec :: Dec -> [Name]
 namesBoundInDec (FunD name _)                       = [name]
 namesBoundInDec (ValD pat _ _)                      = namesBoundInPat pat
 
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
 namesBoundInDec (DataD _ name _ _ _ _)              = [name]
 namesBoundInDec (NewtypeD _ name _ _ _ _)           = [name]
-#else
-namesBoundInDec (DataD _ name _ _ _)                = [name]
-namesBoundInDec (NewtypeD _ name _ _ _)             = [name]
-#endif
 
 namesBoundInDec (TySynD name _ _)                   = [name]
 namesBoundInDec (ClassD _ name _ _ _)               = [name]
 namesBoundInDec (ForeignD (ImportF _ _ _ name _))   = [name]
 
-#if defined(__GLASGOW_HASKELL__)
-#if __GLASGOW_HASKELL__ >= 800
 namesBoundInDec (OpenTypeFamilyD (TypeFamilyHead name _ _ _))     = [name]
 namesBoundInDec (ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _) = [name]
-#elif __GLASGOW_HASKELL__ >= 612
-namesBoundInDec (FamilyD _ name _ _)                = [name]
-#endif
-#endif
 
 namesBoundInDec _                                   = []
 
@@ -131,12 +116,8 @@ headOfType (TupleT n) = tupleTypeName n
 headOfType ArrowT = ''(->)
 headOfType ListT = ''[]
 headOfType (AppT t _) = headOfType t
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 612
 headOfType (SigT t _) = headOfType t
-#endif
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 headOfType (UnboxedTupleT n) = unboxedTupleTypeName n
-#endif
 headOfType (PromotedT name) = name
 headOfType (ParensT t) = headOfType t
 headOfType (InfixT _ name _) = name
@@ -149,9 +130,7 @@ headOfType (ForallVisT _ t) = headOfType t
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
 headOfType (PromotedInfixT _ name _) = name
 #endif
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 704
 headOfType ty = error $ "headOfType: Unhandled type: " ++ show ty
-#endif
 
 -- | Determines whether a type variable occurs free in a type, including in kinds and contexts.
 -- Binders in a 'forall' telescope scope over the kinds of later binders and over the body.
@@ -228,19 +207,12 @@ substVarsWith topVars resultType argType = subst Map.empty argType
       ArrowT -> ArrowT
       ListT -> ListT
       UnboxedTupleT k -> UnboxedTupleT k
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
       InfixT t1 x t2 -> InfixT (subst bs t1) x (subst bs t2)
       ParensT t -> ParensT (subst bs t)
       UInfixT t1 x t2 -> UInfixT (subst bs t1) x (subst bs t2)
       WildCardT -> WildCardT
-#endif
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 802
       UnboxedSumT k -> UnboxedSumT k
-#endif
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 710
       EqualityT -> EqualityT
-#endif
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 706
       ConstraintT -> ConstraintT
       LitT l -> LitT l
       PromotedConsT -> PromotedConsT
@@ -248,7 +220,6 @@ substVarsWith topVars resultType argType = subst Map.empty argType
       PromotedT n -> PromotedT n
       PromotedTupleT k -> PromotedTupleT k
       StarT -> StarT
-#endif
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
       PromotedInfixT t1 x t2 -> PromotedInfixT (subst bs t1) x (subst bs t2)
       PromotedUInfixT t1 x t2 -> PromotedUInfixT (subst bs t1) x (subst bs t2)
@@ -278,9 +249,7 @@ kindArity k = case k of
   ForallT _ _ t -> kindArity t
   AppT (AppT ArrowT _) t -> 1 + kindArity t
   SigT t _ -> kindArity t
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 800
   ParensT t -> kindArity t
-#endif
   _ -> 0
 
 -- | Given the name of a type constructor, determine its full arity
