@@ -10,6 +10,7 @@ import Gen
 import Hedgehog
 import Hedgehog.Main (defaultMain)
 import Language.Haskell.TH (mkName, nameBase)
+import Language.Haskell.TH.Datatype.TyVarBndr (tvName)
 import Language.Haskell.TH.Extras
 
 main :: IO ()
@@ -28,6 +29,7 @@ main =
         , ("prop_substVarsWith_existential", prop_substVarsWith_existential)
         , ("prop_tyConArity", prop_tyConArity)
         , ("prop_decCons", prop_decCons)
+        , ("prop_conAccessors", prop_conAccessors)
         ]
     ]
 
@@ -131,3 +133,18 @@ prop_decCons = withTests 1000 . property $ do
   (dec, cons) <- forAll genDataLikeDec
   result <- eval (decCons dec)
   result === cons
+
+-- | 'nameOfCon', 'argTypesOfCon', 'conArity' and 'varsBoundInCon' agree with a
+-- reference for constructors of every form, through any number of foralls.
+-- 'nameOfCon' is only checked for constructors declaring a single name, since
+-- it is documented to fail otherwise.
+prop_conAccessors :: Property
+prop_conAccessors = withTests 1000 . property $ do
+  con <- forAll genCon
+  let ci = conInfo con
+  argTypesOfCon con === ciArgTypes ci
+  conArity con === length (ciArgTypes ci)
+  map tvName (varsBoundInCon con) === ciBinders ci
+  case ciNames ci of
+    [name] -> nameOfCon con === name
+    _ -> success
