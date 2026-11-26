@@ -31,6 +31,7 @@ main =
         , ("prop_decCons", prop_decCons)
         , ("prop_conAccessors", prop_conAccessors)
         , ("prop_substVarsWith_wrapped", prop_substVarsWith_wrapped)
+        , ("prop_kindArity_anyArrow", prop_kindArity_anyArrow)
         ]
     ]
 
@@ -154,3 +155,10 @@ prop_conAccessors = withTests 1000 . property $ do
   case ciNames ci of
     [name] -> nameOfCon con === name
     _ -> success
+
+-- | As 'prop_kindArity', but with arrows written in any of the ways Template
+-- Haskell can represent them, which must not change the arity.
+prop_kindArity_anyArrow :: Property
+prop_kindArity_anyArrow = withTests 1000 . property $ do
+  (k, n) <- forAll genKindWithArityAnyArrow
+  kindArity k === n

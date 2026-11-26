@@ -17,6 +17,7 @@ module Gen
   , genHeadedType
   , genBuiltinHeadedType
   , genKindWithArity
+  , genKindWithArityAnyArrow
   , genDec
   , genCon
   , genDataLikeDec
@@ -361,14 +362,35 @@ genHeadedTypeFrom genHead = do
 -- The kind is built by wrapping a result kind in arrows, parentheses, kind
 -- signatures and foralls, in any order.
 genKindWithArity :: Gen (Kind, Int)
-genKindWithArity = do
+genKindWithArity = genKindWithArityFrom (pure (\arg k -> AppT (AppT ArrowT arg) k))
+
+-- | Like 'genKindWithArity', but each arrow is written in any of the ways
+-- Template Haskell can represent @arg -> k@: with 'ArrowT', with the arrow's
+-- partial application parenthesised, infix (resolved or not), by name with
+-- 'ConT', or as a multiplicity arrow.
+genKindWithArityAnyArrow :: Gen (Kind, Int)
+genKindWithArityAnyArrow = genKindWithArityFrom $ Gen.element
+  [ \arg k -> AppT (AppT ArrowT arg) k
+  , \arg k -> AppT (ParensT (AppT ArrowT arg)) k
+  , \arg k -> InfixT arg ''(->) k
+  , \arg k -> UInfixT arg ''(->) k
+  , \arg k -> AppT (AppT (ConT ''(->)) arg) k
+#if MIN_VERSION_template_haskell(2,17,0)
+  , \arg k -> AppT (AppT (AppT MulArrowT (VarT (mkName "m"))) arg) k
+#endif
+  ]
+
+-- | The generator gives the ways to build an arrow kind @arg -> k@ from @arg@
+-- and @k@.
+genKindWithArityFrom :: Gen (Type -> Kind -> Kind) -> Gen (Kind, Int)
+genKindWithArityFrom genArrow = do
   result <- Gen.element [StarT, ConstraintT, ConT (mkName "Type"), VarT (mkName "k")]
   layers <- Gen.list (Range.linear 0 6) genLayer
   foldr (=<<) (pure (result, 0)) layers
   where
     genLayer :: Gen ((Kind, Int) -> Gen (Kind, Int))
     genLayer = Gen.element
-      [ \(k, n) -> (\arg -> (AppT (AppT ArrowT arg) k, n + 1)) <$> Gen.small genType
+      [ \(k, n) -> (\arrow arg -> (arrow arg k, n + 1)) <$> genArrow <*> Gen.small genType
       , \(k, n) -> pure (ParensT k, n)
       , \(k, n) -> (\s -> (SigT k s, n)) <$> Gen.element [StarT, ConT (mkName "Type")]
       , \(k, n) -> (\bndrs -> (ForallT bndrs [] k, n)) <$> genSmallList genBndrSpec
