@@ -250,6 +250,10 @@ kindArity k = case k of
   AppT (AppT ArrowT _) t -> 1 + kindArity t
   SigT t _ -> kindArity t
   ParensT t -> kindArity t
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 810
+  -- Each visibly quantified variable (forall k ->) is an argument.
+  ForallVisT bndrs t -> length bndrs + kindArity t
+#endif
   _ -> 0
 
 -- | Given the name of a type constructor, determine its full arity
