@@ -1,5 +1,19 @@
 # Revision history for th-extras
 
+## 0.1.0.0 - 2026-11-27
+
+* Major version bump due to behaviour changes rather than ABI changes.
+* `occursInType` now finds variables in kinds and contexts.
+* `namesBoundInDec` also returns constructors, fields, methods and
+  families, so genericalizeDecs renames more names.
+* `substVarsWith` renames clashing binders, substitutes kinds, leaves
+  existential and index variables alone instead of crashing, and looks
+  through parentheses and kind signatures.
+* `kindArity` and `tyConArity` give different arities in some cases.
+* `headOfType`, `decCons` and `namesBoundInPat` handle cases that
+  previously crashed or were missed.
+* Drop support for `ghc-8.0` and `ghc-8.2`.
+
 ## 0.0.0.9 - 2026-02-11
 
 * Support a bunch of new Type constructors in `substVarsWith`.
