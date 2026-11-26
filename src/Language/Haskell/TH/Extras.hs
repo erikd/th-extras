@@ -176,6 +176,21 @@ headOfType (ForallVisT _ t) = headOfType t
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
 headOfType (PromotedInfixT _ name _) = name
 #endif
+-- A chain of unresolved infix applications: if every operator in it is the same, that operator is the head
+-- whatever its fixity. Otherwise the head depends on fixities, which are not available here.
+headOfType ty
+  | op : ops <- unresolvedOps ty =
+      if all (== op) ops
+        then op
+        else error $ "headOfType: the head of an unresolved infix type with different operators "
+          ++ "depends on their fixities: " ++ show ty
+  where
+    unresolvedOps t = case t of
+      UInfixT l n r -> unresolvedOps l ++ n : unresolvedOps r
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
+      PromotedUInfixT l n r -> unresolvedOps l ++ n : unresolvedOps r
+#endif
+      _ -> []
 headOfType ty = error $ "headOfType: Unhandled type: " ++ show ty
 
 -- | Determines whether a type variable occurs free in a type, including in kinds and contexts.
