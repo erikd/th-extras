@@ -19,6 +19,7 @@ main =
         , ("prop_headOfType", prop_headOfType)
         , ("prop_kindArity", prop_kindArity)
         , ("prop_substVarsWith_refined", prop_substVarsWith_refined)
+        , ("prop_namesBoundInDec", prop_namesBoundInDec)
         ]
     ]
 
@@ -71,3 +72,11 @@ prop_kindArity :: Property
 prop_kindArity = withTests 1000 . property $ do
   (k, n) <- forAll genKindWithArity
   kindArity k === n
+
+-- | 'namesBoundInDec' finds every name a declaration brings into scope,
+-- including data constructors, record fields, class methods, associated
+-- families and pattern synonym fields.
+prop_namesBoundInDec :: Property
+prop_namesBoundInDec = withTests 1000 . property $ do
+  dec <- forAll genDec
+  namesBoundInDec dec === decNames dec
