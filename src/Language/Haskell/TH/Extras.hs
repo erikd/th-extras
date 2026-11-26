@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, TemplateHaskell, TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
@@ -6,10 +6,14 @@ module Language.Haskell.TH.Extras where
 
 import Control.Monad
 import Data.Generics
+import qualified Data.Kind as Kind
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
+import GHC.Exts (FUN)
+#endif
 import Language.Haskell.TH
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 914
 import Language.Haskell.TH.Syntax
@@ -148,6 +152,18 @@ headOfType ListT = ''[]
 headOfType (AppT t _) = headOfType t
 headOfType (SigT t _) = headOfType t
 headOfType (UnboxedTupleT n) = unboxedTupleTypeName n
+headOfType (UnboxedSumT n) = unboxedSumTypeName n
+headOfType (PromotedTupleT n) = tupleDataName n
+headOfType PromotedNilT = '[]
+headOfType PromotedConsT = '(:)
+headOfType StarT = ''Kind.Type
+headOfType ConstraintT = ''Kind.Constraint
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
+headOfType EqualityT = ''(~)
+#endif
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
+headOfType MulArrowT = ''FUN
+#endif
 headOfType (PromotedT name) = name
 headOfType (ParensT t) = headOfType t
 headOfType (InfixT _ name _) = name
