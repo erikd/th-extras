@@ -226,7 +226,9 @@ substVarsWith topVars resultType argType = subst Set.empty argType
       MulArrowT -> MulArrowT
 #endif
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
-      ForallVisT xs t -> ForallVisT xs (subst bs t)
+      ForallVisT bndrs t ->
+        let bs' = Set.union bs (Set.fromList (map tvName bndrs))
+        in ForallVisT bndrs (subst bs' t)
 #endif
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 808
       ImplicitParamT s t -> ImplicitParamT s (subst bs t)
