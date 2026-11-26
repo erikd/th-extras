@@ -13,6 +13,7 @@ main =
   defaultMain
     [ checkParallel $ Group "Language.Haskell.TH.Extras"
         [ ("prop_occursInType", prop_occursInType)
+        , ("prop_namesBoundInPat", prop_namesBoundInPat)
         ]
     ]
 
@@ -23,3 +24,9 @@ prop_occursInType = withTests 1000 . property $ do
   ty <- forAll genType
   v <- forAll genVarName
   occursInType v ty === Set.member v (freeVars ty)
+
+-- | 'namesBoundInPat' finds every variable bound by a pattern, in order.
+prop_namesBoundInPat :: Property
+prop_namesBoundInPat = withTests 1000 . property $ do
+  pat <- forAll genPat
+  namesBoundInPat pat === patVars pat
