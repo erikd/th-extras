@@ -217,7 +217,25 @@ substVarsWith
 substVarsWith topVars resultType argType = subst Map.empty argType
   where
     topVars' = reverse topVars
-    AppT resultType' _indexType = resultType
+    -- The result type without its index, x_n.
+    resultType' = case unwrapSpine resultType of
+      AppT f _indexType -> f
+      _ -> error $ "substVarsWith: result type is not an application: " ++ show resultType
+
+    -- Looks through syntax that does not change which type constructor is applied to which parameters.
+    unwrapSpine t = case t of
+      ParensT t' -> unwrapSpine t'
+      SigT t' _ -> unwrapSpine t'
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 808
+      AppKindT t' _ -> unwrapSpine t'
+#endif
+      _ -> t
+
+    -- Looks through syntax that does not change whether a parameter is a variable.
+    unwrapParam t = case t of
+      ParensT t' -> unwrapParam t'
+      SigT t' _ -> unwrapParam t'
+      _ -> t
 
     -- Names that a forall-bound variable must not be called, lest it capture a substituted variable.
     avoid = Set.fromList topVars
@@ -285,9 +303,11 @@ substVarsWith topVars resultType argType = subst Map.empty argType
       AppKindT f x -> AppKindT (subst bs f) (subst bs x)
 #endif
 
-    findVar v (tv:_) (AppT _ (VarT v')) | v == v' = tv
-    -- Skip any other parameter, which may be a variable or (in a GADT) a refined type.
-    findVar v (_:tvs) (AppT t _) = findVar v tvs t
+    -- Walks the parameters of the result type from the right, alongside the instance head variables.
+    findVar v (tv:tvs) t | AppT f x <- unwrapSpine t = case unwrapParam x of
+      VarT v' | v == v' -> tv
+      -- Skip any other parameter, which may be a variable or (in a GADT) a refined type.
+      _ -> findVar v tvs f
     -- Not a parameter of the result type (e.g. an existential or the index): leave it alone.
     findVar v _ _ = v
 
