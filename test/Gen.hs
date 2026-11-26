@@ -14,6 +14,8 @@ module Gen
   , genRefinedSubstCase
   , genHeadedType
   , genKindWithArity
+  , genDec
+  , decNames
   ) where
 
 import Data.List (nub)
@@ -294,3 +296,114 @@ genKindWithArity = do
       , \(k, n) -> (\bndrs -> (ForallVisT bndrs k, n + length bndrs)) <$> genSmallList genBndrUnit
 #endif
       ]
+
+-- | Generates declarations of every kind that can bind names, plus some that
+-- bind none. Names come from small per-namespace pools.
+genDec :: Gen Dec
+genDec = Gen.choice
+  [ FunD <$> genValName <*> pure []
+  , (\p -> ValD p (NormalB (VarE (mkName "undefined"))) []) <$> genPat
+  , DataD [] <$> genTyConName <*> pure [] <*> pure Nothing <*> genSmallList genCon <*> pure []
+  , NewtypeD [] <$> genTyConName <*> pure [] <*> pure Nothing <*> genCon <*> pure []
+#if MIN_VERSION_template_haskell(2,20,0)
+  , TypeDataD <$> genTyConName <*> pure [] <*> pure Nothing <*> genSmallList genCon
+#endif
+  , TySynD <$> genTyConName <*> pure [] <*> pure intT
+  , ClassD [] <$> genTyConName <*> pure [] <*> pure [] <*> genSmallList genClassBodyDec
+  , (\n -> ForeignD (ImportF CCall Safe "foo" n intT)) <$> genValName
+  , (\n -> ForeignD (ExportF CCall "foo" n intT)) <$> genValName
+  , (\n -> OpenTypeFamilyD (TypeFamilyHead n [] NoSig Nothing)) <$> genTyConName
+  , (\n -> ClosedTypeFamilyD (TypeFamilyHead n [] NoSig Nothing) []) <$> genTyConName
+  , (\n -> DataFamilyD n [] Nothing) <$> genTyConName
+#if MIN_VERSION_template_haskell(2,15,0)
+  , genDataInstD
+  , InstanceD Nothing [] (ConT (mkName "C")) <$> genSmallList genDataInstD
+#endif
+  , (\n -> PatSynD n (PrefixPatSyn []) ImplBidir WildP) <$> genValName
+  , (\n fs -> PatSynD n (RecordPatSyn fs) ImplBidir WildP) <$> genValName <*> genSmallList genFieldName
+  , (\n -> SigD n intT) <$> genValName
+  ]
+  where
+    intT = ConT (mkName "Int")
+    noBang = Bang NoSourceUnpackedness NoSourceStrictness
+    resT = ConT (mkName "T")
+
+    genValName = Gen.element (map mkName ["f", "g", "h"])
+    genTyConName = Gen.element (map mkName ["T", "U", "V"])
+    genDataConName = Gen.element (map mkName ["A", "B", "C"])
+    genFieldName = Gen.element (map mkName ["f1", "f2", "f3"])
+
+    genCon :: Gen Con
+    genCon = Gen.recursive Gen.choice
+      [ NormalC <$> genDataConName <*> pure [(noBang, intT)]
+      , RecC <$> genDataConName <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName)
+      , (\n -> InfixC (noBang, intT) n (noBang, intT)) <$> genDataConName
+      , GadtC <$> Gen.list (Range.linear 1 3) genDataConName <*> pure [] <*> pure resT
+      , RecGadtC <$> Gen.list (Range.linear 1 3) genDataConName
+          <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName) <*> pure resT
+      ]
+      [ Gen.subterm genCon (ForallC [] []) ]
+
+    -- Declarations that can appear in a class body.
+    genClassBodyDec :: Gen Dec
+    genClassBodyDec = Gen.choice
+      [ (\n -> SigD n intT) <$> genValName
+      , FunD <$> genValName <*> pure []
+      , (\n -> OpenTypeFamilyD (TypeFamilyHead n [] NoSig Nothing)) <$> genTyConName
+      , (\n -> DataFamilyD n [] Nothing) <$> genTyConName
+      ]
+
+#if MIN_VERSION_template_haskell(2,15,0)
+    genDataInstD :: Gen Dec
+    genDataInstD = Gen.choice
+      [ DataInstD [] Nothing (AppT (ConT (mkName "F")) intT) Nothing <$> genSmallList genCon <*> pure []
+      , NewtypeInstD [] Nothing (AppT (ConT (mkName "F")) intT) Nothing <$> genCon <*> pure []
+      ]
+#endif
+
+-- | Reference implementation: every name a declaration brings into scope, in
+-- order: the declared thing itself, then its data constructors and record
+-- fields, class methods and associated families, or pattern synonym fields.
+-- Class default methods and instance method definitions define existing
+-- names, so they bind nothing new.
+decNames :: Dec -> [Name]
+decNames dec = case dec of
+  FunD n _ -> [n]
+  ValD p _ _ -> patVars p
+  DataD _ n _ _ cons _ -> n : concatMap conNames cons
+  NewtypeD _ n _ _ con _ -> n : conNames con
+#if MIN_VERSION_template_haskell(2,20,0)
+  TypeDataD n _ _ cons -> n : concatMap conNames cons
+#endif
+  TySynD n _ _ -> [n]
+  ClassD _ n _ _ body -> n : concatMap classBodyNames body
+  ForeignD (ImportF _ _ _ n _) -> [n]
+  ForeignD (ExportF {}) -> []
+  OpenTypeFamilyD (TypeFamilyHead n _ _ _) -> [n]
+  ClosedTypeFamilyD (TypeFamilyHead n _ _ _) _ -> [n]
+  DataFamilyD n _ _ -> [n]
+  DataInstD _ _ _ _ cons _ -> concatMap conNames cons
+  NewtypeInstD _ _ _ _ con _ -> conNames con
+  InstanceD _ _ _ body -> concatMap decNames [ d | d <- body, isDataInst d ]
+  PatSynD n (RecordPatSyn fs) _ _ -> n : fs
+  PatSynD n _ _ _ -> [n]
+  _ -> []
+  where
+    conNames con = case con of
+      NormalC n _ -> [n]
+      RecC n fs -> n : [ f | (f, _, _) <- fs ]
+      InfixC _ n _ -> [n]
+      ForallC _ _ c -> conNames c
+      GadtC ns _ _ -> ns
+      RecGadtC ns fs _ -> ns ++ [ f | (f, _, _) <- fs ]
+
+    classBodyNames d = case d of
+      SigD n _ -> [n]
+      OpenTypeFamilyD {} -> decNames d
+      DataFamilyD {} -> decNames d
+      _ -> []
+
+    isDataInst d = case d of
+      DataInstD {} -> True
+      NewtypeInstD {} -> True
+      _ -> False
