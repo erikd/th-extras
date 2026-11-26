@@ -137,6 +137,18 @@ headOfType (SigT t _) = headOfType t
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
 headOfType (UnboxedTupleT n) = unboxedTupleTypeName n
 #endif
+headOfType (PromotedT name) = name
+headOfType (ParensT t) = headOfType t
+headOfType (InfixT _ name _) = name
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 808
+headOfType (AppKindT t _) = headOfType t
+#endif
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 810
+headOfType (ForallVisT _ t) = headOfType t
+#endif
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 904
+headOfType (PromotedInfixT _ name _) = name
+#endif
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 704
 headOfType ty = error $ "headOfType: Unhandled type: " ++ show ty
 #endif
