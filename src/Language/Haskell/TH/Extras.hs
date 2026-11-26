@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskell #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, TemplateHaskell #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
@@ -59,34 +59,24 @@ varsBoundInCon :: Con -> [TyVarBndrSpec]
 varsBoundInCon (ForallC bndrs _ con) = bndrs ++ varsBoundInCon con
 varsBoundInCon _ = []
 
+-- | Determines the term variables bound by a pattern, in left-to-right order.
 namesBoundInPat :: Pat -> [Name]
-namesBoundInPat (VarP name)             = [name]
-namesBoundInPat (TupP pats)             = pats >>= namesBoundInPat
-#if MIN_VERSION_template_haskell(2,18,0)
-namesBoundInPat (ConP _ _ pats)         = pats >>= namesBoundInPat
-#else
-namesBoundInPat (ConP _ pats)           = pats >>= namesBoundInPat
-#endif
-namesBoundInPat (InfixP p1 _ p2)        = namesBoundInPat p1 ++ namesBoundInPat p2
-namesBoundInPat (TildeP pat)            = namesBoundInPat pat
-namesBoundInPat (AsP name pat)          = name : namesBoundInPat pat
-namesBoundInPat (RecP _ fieldPats)      = map snd fieldPats >>= namesBoundInPat
-namesBoundInPat (ListP pats)            = pats >>= namesBoundInPat
-namesBoundInPat (SigP pat _)            = namesBoundInPat pat
-
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 612
-namesBoundInPat (BangP pat)             = namesBoundInPat pat
-#endif
-
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 700
-namesBoundInPat (ViewP _ pat)           = namesBoundInPat pat
-#endif
-
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 702
-namesBoundInPat (UnboxedTupP pats)      = pats >>= namesBoundInPat
-#endif
-
-namesBoundInPat _                       = []
+namesBoundInPat pat = case pat of
+    VarP name     -> [name]
+    AsP name pat' -> name : namesBoundInPat pat'
+    -- The expression in a view pattern binds nothing in the enclosing scope.
+    ViewP _ pat'  -> namesBoundInPat pat'
+    -- Every other constructor binds nothing itself, so just look at all of its
+    -- sub-patterns.
+    _ -> concat (gmapQ goData pat)
+  where
+    goData :: Data d => d -> [Name]
+    goData d
+        | Just p <- cast d = namesBoundInPat p
+        -- Patterns cannot bind variables inside expressions or types.
+        | Just (_ :: Exp) <- cast d = []
+        | Just (_ :: Type) <- cast d = []
+        | otherwise = concat (gmapQ goData d)
 
 
 namesBoundInDec :: Dec -> [Name]
