@@ -30,12 +30,24 @@ missing methods/fields (applied to the test suite too), so warnings that are onl
 
 The test suite (`test/`) is Hedgehog properties that compare library functions against independent oracles:
 
-- `test/Gen.hs` holds generators for `Type` and `Pat` that cover every constructor available in the
-  `template-haskell` being built against (CPP-guarded with `MIN_VERSION_template_haskell`), plus reference
-  implementations (e.g. `freeVars`, `patVars`) used as oracles.
+- `test/Gen.hs` holds generators for TH syntax (`Type`, `Pat`, `Dec`, `Con`, kinds, and inputs for
+  `substVarsWith`) that cover every constructor available in the `template-haskell` being built against
+  (CPP-guarded with `MIN_VERSION_template_haskell`), plus reference implementations (e.g. `freeVars`,
+  `patVars`, `decNames`, `typeHead`) used as oracles. Several generators deliberately write the same thing in
+  different but equivalent syntax (parentheses, kind signatures, infix forms) to check that results don't
+  depend on it.
+- `test/Fixtures.hs` holds declarations that are reified at compile time, for functions that need `reify`
+  (e.g. `tyConArity`), and splice helpers that run the function at compile time and splice in the result.
+  Fixtures needing newer extensions are CPP-guarded on `__GLASGOW_HASKELL__`. GHC's stage restriction means a
+  splice can only run functions defined in another module, which is why the helpers live here and the
+  splices in `Main`.
 - `test/Main.hs` holds the properties, registered explicitly in a `Group` (no TH `discover`).
+- Library functions report failure with `error`, so tests must force results where Hedgehog can catch the
+  exception (e.g. `eval`, or `try`/`evaluate` with `evalIO`); a lazy `error` forced later, such as inside
+  `annotateShow`, escapes and crashes the whole suite. Compile-time helpers in `Fixtures` likewise catch
+  errors and splice them in as values, so they show up as test failures rather than compile failures.
 - When a new TH constructor appears, add it to the generators and the reference functions so the properties
-  exercise it.
+  exercise it, and add a fixture if it affects what `reify` returns.
 
 ## Multi-GHC compatibility
 
