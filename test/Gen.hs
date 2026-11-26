@@ -17,6 +17,8 @@ module Gen
   , genBuiltinHeadedType
   , genKindWithArity
   , genDec
+  , genCon
+  , genDataLikeDec
   , decNames
   , genQuotedDecs
   , allNames
@@ -371,24 +373,10 @@ genDec = Gen.choice
   ]
   where
     intT = ConT (mkName "Int")
-    noBang = Bang NoSourceUnpackedness NoSourceStrictness
-    resT = ConT (mkName "T")
 
     genValName = Gen.element (map mkName ["f", "g", "h"])
     genTyConName = Gen.element (map mkName ["T", "U", "V"])
-    genDataConName = Gen.element (map mkName ["A", "B", "C"])
     genFieldName = Gen.element (map mkName ["f1", "f2", "f3"])
-
-    genCon :: Gen Con
-    genCon = Gen.recursive Gen.choice
-      [ NormalC <$> genDataConName <*> pure [(noBang, intT)]
-      , RecC <$> genDataConName <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName)
-      , (\n -> InfixC (noBang, intT) n (noBang, intT)) <$> genDataConName
-      , GadtC <$> Gen.list (Range.linear 1 3) genDataConName <*> pure [] <*> pure resT
-      , RecGadtC <$> Gen.list (Range.linear 1 3) genDataConName
-          <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName) <*> pure resT
-      ]
-      [ Gen.subterm genCon (ForallC [] []) ]
 
     -- Declarations that can appear in a class body.
     genClassBodyDec :: Gen Dec
@@ -405,6 +393,45 @@ genDec = Gen.choice
       [ DataInstD [] Nothing (AppT (ConT (mkName "F")) intT) Nothing <$> genSmallList genCon <*> pure []
       , NewtypeInstD [] Nothing (AppT (ConT (mkName "F")) intT) Nothing <$> genCon <*> pure []
       ]
+#endif
+
+-- | Generates data constructors of every form, including GADT constructors
+-- declaring several names at once.
+genCon :: Gen Con
+genCon = Gen.recursive Gen.choice
+  [ NormalC <$> genDataConName <*> pure [(noBang, intT)]
+  , RecC <$> genDataConName <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName)
+  , (\n -> InfixC (noBang, intT) n (noBang, intT)) <$> genDataConName
+  , GadtC <$> Gen.list (Range.linear 1 3) genDataConName <*> pure [] <*> pure resT
+  , RecGadtC <$> Gen.list (Range.linear 1 3) genDataConName
+      <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName) <*> pure resT
+  ]
+  [ Gen.subterm genCon (ForallC [] []) ]
+  where
+    intT = ConT (mkName "Int")
+    noBang = Bang NoSourceUnpackedness NoSourceStrictness
+    resT = ConT (mkName "T")
+    genDataConName = Gen.element (map mkName ["A", "B", "C"])
+    genFieldName = Gen.element (map mkName ["f1", "f2", "f3"])
+
+-- | Generates every kind of declaration that declares data constructors,
+-- together with those constructors.
+genDataLikeDec :: Gen (Dec, [Con])
+genDataLikeDec = Gen.choice
+  [ (\n cs -> (DataD [] n [] Nothing cs [], cs)) <$> genTyConName <*> genSmallList genCon
+  , (\n c -> (NewtypeD [] n [] Nothing c [], [c])) <$> genTyConName <*> genCon
+#if MIN_VERSION_template_haskell(2,20,0)
+  , (\n cs -> (TypeDataD n [] Nothing cs, cs)) <$> genTyConName <*> genSmallList genCon
+#endif
+#if MIN_VERSION_template_haskell(2,15,0)
+  , (\cs -> (DataInstD [] Nothing instHead Nothing cs [], cs)) <$> genSmallList genCon
+  , (\c -> (NewtypeInstD [] Nothing instHead Nothing c [], [c])) <$> genCon
+#endif
+  ]
+  where
+    genTyConName = Gen.element (map mkName ["T", "U", "V"])
+#if MIN_VERSION_template_haskell(2,15,0)
+    instHead = AppT (ConT (mkName "F")) (ConT (mkName "Int"))
 #endif
 
 -- | Reference implementation: every name a declaration brings into scope, in
