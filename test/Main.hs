@@ -27,6 +27,7 @@ main =
         , ("prop_headOfType_builtin", prop_headOfType_builtin)
         , ("prop_substVarsWith_existential", prop_substVarsWith_existential)
         , ("prop_tyConArity", prop_tyConArity)
+        , ("prop_decCons", prop_decCons)
         ]
     ]
 
@@ -121,3 +122,12 @@ prop_tyConArity :: Property
 prop_tyConArity = withTests 1 . property $
   forM_ ($(arityCases) :: [(String, Either String Int, Int)]) $ \(name, result, expected) ->
     (name, result) === (name, Right expected)
+
+-- | 'decCons' returns the data constructors of every kind of declaration that
+-- declares them: data, newtype and @type data@ declarations, and data and
+-- newtype instances.
+prop_decCons :: Property
+prop_decCons = withTests 1000 . property $ do
+  (dec, cons) <- forAll genDataLikeDec
+  result <- eval (decCons dec)
+  result === cons
