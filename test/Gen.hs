@@ -16,8 +16,11 @@ module Gen
   , genKindWithArity
   , genDec
   , decNames
+  , genQuotedDecs
+  , allNames
   ) where
 
+import Data.Generics (Data, everything, everywhere, mkQ, mkT)
 import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -27,6 +30,7 @@ import Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax (Name (..), NameFlavour (..), mkNameU, occString)
 import Language.Haskell.TH.Datatype.TyVarBndr
 
 -- | Type variable names come from a small pool so that binders, free variables
@@ -407,3 +411,20 @@ decNames dec = case dec of
       DataInstD {} -> True
       NewtypeInstD {} -> True
       _ -> False
+
+-- | Generates declarations as a declaration quote would produce them: every
+-- name, bound or not, is made fresh ('NameU'), with the same unique for every
+-- occurrence of the same name.
+genQuotedDecs :: Gen [Dec]
+genQuotedDecs = do
+  decs <- Gen.list (Range.linear 1 4) genDec
+  let bases = nub [ occString occ | Name occ NameS <- allNames decs ]
+      uniques = Map.fromList (zip bases [1 ..])
+      freshen n@(Name occ NameS) =
+        maybe n (mkNameU (occString occ) . fromInteger) (Map.lookup (occString occ) uniques)
+      freshen n = n
+  pure (everywhere (mkT freshen) decs)
+
+-- | Every 'Name' occurring in a value, in traversal order.
+allNames :: Data a => a -> [Name]
+allNames = everything (++) (mkQ [] (\n -> [n]))
