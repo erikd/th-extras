@@ -22,6 +22,7 @@ main =
         , ("prop_substVarsWith_refined", prop_substVarsWith_refined)
         , ("prop_namesBoundInDec", prop_namesBoundInDec)
         , ("prop_genericalizeDecs", prop_genericalizeDecs)
+        , ("prop_headOfType_builtin", prop_headOfType_builtin)
         ]
     ]
 
@@ -92,3 +93,12 @@ prop_genericalizeDecs = withTests 1000 . property $ do
   let bound = Set.fromList (concatMap decNames decs)
       expected n = if Set.member n bound then mkName (nameBase n) else n
   allNames (genericalizeDecs decs) === map expected (allNames decs)
+
+-- | 'headOfType' finds the type constructor at the head of a type whose head is
+-- a built-in type constructor with dedicated Template Haskell syntax, such as
+-- unboxed sums, promoted lists and tuples, 'Type', 'Constraint', equality and
+-- the multiplicity-polymorphic arrow.
+prop_headOfType_builtin :: Property
+prop_headOfType_builtin = withTests 1000 . property $ do
+  (ty, name) <- forAll genBuiltinHeadedType
+  headOfType ty === name

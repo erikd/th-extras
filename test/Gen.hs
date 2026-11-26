@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskellQuotes #-}
+{-# LANGUAGE CPP, TemplateHaskellQuotes, TypeOperators #-}
 
 -- | Hedgehog generators for Template Haskell syntax, plus independent reference
 -- implementations used as oracles by the properties in "Main".
@@ -13,6 +13,7 @@ module Gen
   , genSubstCase
   , genRefinedSubstCase
   , genHeadedType
+  , genBuiltinHeadedType
   , genKindWithArity
   , genDec
   , decNames
@@ -21,11 +22,15 @@ module Gen
   ) where
 
 import Data.Generics (Data, everything, everywhere, mkQ, mkT)
+import qualified Data.Kind as Kind
 import Data.List (nub)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+#if MIN_VERSION_template_haskell(2,17,0)
+import GHC.Exts (FUN)
+#endif
 import Hedgehog (Gen)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -245,11 +250,7 @@ genSubstCaseWith refined = do
 -- any number of applications, parentheses, kind signatures, foralls and kind
 -- applications, none of which change the head.
 genHeadedType :: Gen (Type, Name)
-genHeadedType = do
-  (ty0, name) <- genHead
-  layers <- Gen.list (Range.linear 0 5) genLayer
-  ty <- foldr (=<<) (pure ty0) layers
-  pure (ty, name)
+genHeadedType = genHeadedTypeFrom genHead
   where
     genHead :: Gen (Type, Name)
     genHead = Gen.choice
@@ -266,6 +267,35 @@ genHeadedType = do
 #endif
       ]
 
+-- | Like 'genHeadedType', but the head is one of the built-in type constructors
+-- that Template Haskell represents with dedicated 'Type' constructors rather
+-- than 'ConT', paired with the name of that type constructor.
+genBuiltinHeadedType :: Gen (Type, Name)
+genBuiltinHeadedType = genHeadedTypeFrom $ Gen.choice
+  [ (\k -> (UnboxedSumT k, unboxedSumTypeName k)) <$> Gen.int (Range.linear 2 3)
+  , (\k -> (PromotedTupleT k, tupleDataName k)) <$> Gen.element [0, 2, 3]
+  , pure (PromotedNilT, '[])
+  , pure (PromotedConsT, '(:))
+  , pure (StarT, ''Kind.Type)
+  , pure (ConstraintT, ''Kind.Constraint)
+#if MIN_VERSION_template_haskell(2,19,0)
+  , pure (EqualityT, ''(~))
+#endif
+#if MIN_VERSION_template_haskell(2,17,0)
+  , pure (MulArrowT, ''FUN)
+#endif
+  ]
+
+-- | Wraps a generated head type in any number of applications, parentheses,
+-- kind signatures, foralls and kind applications, none of which change the
+-- head.
+genHeadedTypeFrom :: Gen (Type, Name) -> Gen (Type, Name)
+genHeadedTypeFrom genHead = do
+  (ty0, name) <- genHead
+  layers <- Gen.list (Range.linear 0 5) genLayer
+  ty <- foldr (=<<) (pure ty0) layers
+  pure (ty, name)
+  where
     genLayer :: Gen (Type -> Gen Type)
     genLayer = Gen.element
       [ \t -> AppT t <$> Gen.small genType
