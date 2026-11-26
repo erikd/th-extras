@@ -30,6 +30,7 @@ main =
         , ("prop_tyConArity", prop_tyConArity)
         , ("prop_decCons", prop_decCons)
         , ("prop_conAccessors", prop_conAccessors)
+        , ("prop_substVarsWith_wrapped", prop_substVarsWith_wrapped)
         ]
     ]
 
@@ -63,6 +64,11 @@ prop_substVarsWith_refined = withTests 1000 . property $ checkSubstCase =<< forA
 -- type and so must be left unchanged.
 prop_substVarsWith_existential :: Property
 prop_substVarsWith_existential = withTests 1000 . property $ checkSubstCase =<< forAll genExistentialSubstCase
+
+-- | As 'prop_substVarsWith', but the result type is written with parentheses,
+-- kind signatures and kind applications, which must not change the result.
+prop_substVarsWith_wrapped :: Property
+prop_substVarsWith_wrapped = withTests 1000 . property $ checkSubstCase =<< forAll genWrappedSubstCase
 
 checkSubstCase :: SubstCase -> PropertyT IO ()
 checkSubstCase sc = do

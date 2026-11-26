@@ -13,6 +13,7 @@ module Gen
   , genSubstCase
   , genRefinedSubstCase
   , genExistentialSubstCase
+  , genWrappedSubstCase
   , genHeadedType
   , genBuiltinHeadedType
   , genKindWithArity
@@ -240,6 +241,35 @@ genExistentialSubstCase = do
   sc <- genSubstCaseWith (Range.linear 0 2)
   others <- Gen.filter (not . null) (Gen.subsequence (map mkName ["e1", "e2", "i"]))
   pure sc { scArgType = foldl AppT (scArgType sc) (map VarT others) }
+
+-- | Like 'genSubstCase' (with some refined parameters), but the result type is
+-- written with extra syntax that does not change its meaning: parentheses and
+-- kind signatures around the whole type, around partial applications and
+-- around parameters, and kind applications in the application spine.
+genWrappedSubstCase :: Gen SubstCase
+genWrappedSubstCase = do
+  sc <- genSubstCaseWith (Range.linear 0 2)
+  resultType <- wrapSpine (scResultType sc)
+  pure sc { scResultType = resultType }
+  where
+    wrapSpine :: Type -> Gen Type
+    wrapSpine ty = case ty of
+      AppT f x -> do
+        f' <- wrapSpine f
+        x' <- wrapAnnotated x
+        wrapParens (AppT f' x')
+      _ -> do
+        kindApps <- genSmallList (Gen.small genType)
+        wrapParens (foldl appKind ty kindApps)
+
+    wrapParens t = Gen.element [t, ParensT t]
+    wrapAnnotated t = Gen.element [t, ParensT t, SigT t StarT, ParensT (SigT t StarT)]
+
+#if MIN_VERSION_template_haskell(2,15,0)
+    appKind = AppKindT
+#else
+    appKind t _ = t
+#endif
 
 -- | The range is the number of parameters of the result type that are refined
 -- to concrete types rather than being variables.
