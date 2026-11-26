@@ -76,21 +76,51 @@ namesBoundInPat pat = case pat of
         | otherwise = concat (gmapQ goData d)
 
 
+-- | Determines the names a declaration brings into scope: the declared thing itself, plus any data
+-- constructors and record fields, class methods and associated families, or pattern synonym record fields.
+-- Class default methods and instance method definitions define names declared elsewhere, so they are not
+-- included, but data constructors of associated data instances are.
 namesBoundInDec :: Dec -> [Name]
-namesBoundInDec (FunD name _)                       = [name]
-namesBoundInDec (ValD pat _ _)                      = namesBoundInPat pat
+namesBoundInDec dec = case dec of
+    FunD name _                                       -> [name]
+    ValD pat _ _                                      -> namesBoundInPat pat
+    DataD _ name _ _ cons _                           -> name : concatMap namesBoundInCon cons
+    NewtypeD _ name _ _ con _                         -> name : namesBoundInCon con
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 906
+    TypeDataD name _ _ cons                           -> name : concatMap namesBoundInCon cons
+#endif
+    TySynD name _ _                                   -> [name]
+    ClassD _ name _ _ decs                            -> name : concatMap namesBoundInClassDec decs
+    ForeignD (ImportF _ _ _ name _)                   -> [name]
+    OpenTypeFamilyD (TypeFamilyHead name _ _ _)       -> [name]
+    ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _   -> [name]
+    DataFamilyD name _ _                              -> [name]
+    DataInstD _ _ _ _ cons _                          -> concatMap namesBoundInCon cons
+    NewtypeInstD _ _ _ _ con _                        -> namesBoundInCon con
+    InstanceD _ _ _ decs                              -> concatMap namesBoundInInstanceDec decs
+    PatSynD name (RecordPatSyn fields) _ _            -> name : fields
+    PatSynD name _ _ _                                -> [name]
+    _                                                 -> []
+  where
+    namesBoundInClassDec d = case d of
+        SigD name _ -> [name]
+        OpenTypeFamilyD {} -> namesBoundInDec d
+        DataFamilyD {} -> namesBoundInDec d
+        _ -> []
+    namesBoundInInstanceDec d = case d of
+        DataInstD {} -> namesBoundInDec d
+        NewtypeInstD {} -> namesBoundInDec d
+        _ -> []
 
-namesBoundInDec (DataD _ name _ _ _ _)              = [name]
-namesBoundInDec (NewtypeD _ name _ _ _ _)           = [name]
-
-namesBoundInDec (TySynD name _ _)                   = [name]
-namesBoundInDec (ClassD _ name _ _ _)               = [name]
-namesBoundInDec (ForeignD (ImportF _ _ _ name _))   = [name]
-
-namesBoundInDec (OpenTypeFamilyD (TypeFamilyHead name _ _ _))     = [name]
-namesBoundInDec (ClosedTypeFamilyD (TypeFamilyHead name _ _ _) _) = [name]
-
-namesBoundInDec _                                   = []
+-- | Determines the data constructor names and record field names bound by a constructor.
+namesBoundInCon :: Con -> [Name]
+namesBoundInCon con = case con of
+    NormalC name _          -> [name]
+    RecC name fields        -> name : [ f | (f, _, _) <- fields ]
+    InfixC _ name _         -> [name]
+    ForallC _ _ con'        -> namesBoundInCon con'
+    GadtC names _ _         -> names
+    RecGadtC names fields _ -> names ++ [ f | (f, _, _) <- fields ]
 
 genericalizeName :: Name -> Name
 genericalizeName = mkName . nameBase
