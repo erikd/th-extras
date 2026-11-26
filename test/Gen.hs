@@ -19,6 +19,8 @@ module Gen
   , genDec
   , genCon
   , genDataLikeDec
+  , ConInfo (..)
+  , conInfo
   , decNames
   , genQuotedDecs
   , allNames
@@ -406,7 +408,9 @@ genCon = Gen.recursive Gen.choice
   , RecGadtC <$> Gen.list (Range.linear 1 3) genDataConName
       <*> genSmallList ((\f -> (f, noBang, intT)) <$> genFieldName) <*> pure resT
   ]
-  [ Gen.subterm genCon (ForallC [] []) ]
+  [ Gen.subterm genCon (ForallC [] [])
+  , ForallC <$> genSmallList genBndrSpec <*> pure [] <*> genCon
+  ]
   where
     intT = ConT (mkName "Int")
     noBang = Bang NoSourceUnpackedness NoSourceStrictness
@@ -497,3 +501,19 @@ genQuotedDecs = do
 -- | Every 'Name' occurring in a value, in traversal order.
 allNames :: Data a => a -> [Name]
 allNames = everything (++) (mkQ [] (\n -> [n]))
+
+-- | Reference implementation of what the constructor accessors should report.
+data ConInfo = ConInfo
+  { ciNames :: [Name]
+  , ciArgTypes :: [Type]
+  , ciBinders :: [Name]
+  } deriving (Eq, Show)
+
+conInfo :: Con -> ConInfo
+conInfo con = case con of
+  NormalC n args -> ConInfo [n] (map snd args) []
+  RecC n fields -> ConInfo [n] [ t | (_, _, t) <- fields ] []
+  InfixC (_, l) n (_, r) -> ConInfo [n] [l, r] []
+  ForallC bndrs _ c -> let ci = conInfo c in ci { ciBinders = map tvName bndrs ++ ciBinders ci }
+  GadtC ns args _ -> ConInfo ns (map snd args) []
+  RecGadtC ns fields _ -> ConInfo ns [ t | (_, _, t) <- fields ] []
