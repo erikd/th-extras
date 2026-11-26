@@ -12,6 +12,7 @@ module Gen
   , SubstCase (..)
   , genSubstCase
   , genHeadedType
+  , genKindWithArity
   ) where
 
 import Data.List (nub)
@@ -255,5 +256,26 @@ genHeadedType = do
 #endif
 #if MIN_VERSION_template_haskell(2,16,0)
       , \t -> (\bndrs -> ForallVisT bndrs t) <$> genSmallList genBndrUnit
+#endif
+      ]
+
+-- | Generates a kind together with its arity: the number of arguments (visible
+-- type arguments and arrow arguments) it takes before reaching a result kind.
+-- The kind is built by wrapping a result kind in arrows, parentheses, kind
+-- signatures and foralls, in any order.
+genKindWithArity :: Gen (Kind, Int)
+genKindWithArity = do
+  result <- Gen.element [StarT, ConstraintT, ConT (mkName "Type"), VarT (mkName "k")]
+  layers <- Gen.list (Range.linear 0 6) genLayer
+  foldr (=<<) (pure (result, 0)) layers
+  where
+    genLayer :: Gen ((Kind, Int) -> Gen (Kind, Int))
+    genLayer = Gen.element
+      [ \(k, n) -> (\arg -> (AppT (AppT ArrowT arg) k, n + 1)) <$> Gen.small genType
+      , \(k, n) -> pure (ParensT k, n)
+      , \(k, n) -> (\s -> (SigT k s, n)) <$> Gen.element [StarT, ConT (mkName "Type")]
+      , \(k, n) -> (\bndrs -> (ForallT bndrs [] k, n)) <$> genSmallList genBndrSpec
+#if MIN_VERSION_template_haskell(2,16,0)
+      , \(k, n) -> (\bndrs -> (ForallVisT bndrs k, n + length bndrs)) <$> genSmallList genBndrUnit
 #endif
       ]
