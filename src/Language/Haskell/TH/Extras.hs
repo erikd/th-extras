@@ -238,7 +238,8 @@ substVarsWith topVars resultType argType = subst Map.empty argType
 #endif
 
     findVar v (tv:_) (AppT _ (VarT v')) | v == v' = tv
-    findVar v (_:tvs) (AppT t (VarT _)) = findVar v tvs t
+    -- Skip any other parameter, which may be a variable or (in a GADT) a refined type.
+    findVar v (_:tvs) (AppT t _) = findVar v tvs t
     findVar v _ _ = error $ "substVarsWith: couldn't look up variable substitution for " ++ show v
       ++ " with topVars: " ++ show topVars ++ " resultType: " ++ show resultType ++ " argType: " ++ show argType
 
