@@ -16,6 +16,7 @@ module Gen
   , genWrappedSubstCase
   , genHeadedType
   , genBuiltinHeadedType
+  , genUnresolvedHeadedType
   , genKindWithArity
   , genKindWithArityAnyArrow
   , genDec
@@ -332,6 +333,40 @@ genBuiltinHeadedType = genHeadedTypeFrom $ Gen.choice
   , pure (MulArrowT, ''FUN)
 #endif
   ]
+
+-- | Like 'genHeadedType', but the head is a chain of unresolved infix
+-- applications ('UInfixT' or 'PromotedUInfixT') of arbitrary shape whose
+-- operators are all the same, so that the head is that operator whatever the
+-- operator's fixity.
+genUnresolvedHeadedType :: Gen (Type, Name)
+genUnresolvedHeadedType = genHeadedTypeFrom $ Gen.choice
+  [ (\t -> (t, mkName "+++")) <$> genChain (\l r -> UInfixT l (mkName "+++") r)
+#if MIN_VERSION_template_haskell(2,19,0)
+  , (\t -> (t, mkName ":+++")) <$> genChain (\l r -> PromotedUInfixT l (mkName ":+++") r)
+#endif
+  ]
+  where
+    -- A tree of at least one unresolved application, with operands that do not
+    -- themselves continue the chain.
+    genChain :: (Type -> Type -> Type) -> Gen Type
+    genChain node = Gen.recursive Gen.choice
+      [ node <$> genOperand <*> genOperand ]
+      [ Gen.subterm2 (genChain node) (genChain node) node
+      , Gen.subterm (genChain node) (`node` VarT (mkName "a"))
+      , Gen.subterm (genChain node) (node (VarT (mkName "a")))
+      ]
+
+    -- Operands that are themselves unresolved applications would extend the
+    -- chain, so parenthesise them.
+    genOperand :: Gen Type
+    genOperand = protect <$> Gen.small genType
+
+    protect t = case t of
+      UInfixT {} -> ParensT t
+#if MIN_VERSION_template_haskell(2,19,0)
+      PromotedUInfixT {} -> ParensT t
+#endif
+      _ -> t
 
 -- | Wraps a generated head type in any number of applications, parentheses,
 -- kind signatures, foralls and kind applications, none of which change the
