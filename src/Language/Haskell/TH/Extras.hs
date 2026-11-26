@@ -6,8 +6,9 @@ module Language.Haskell.TH.Extras where
 
 import Control.Monad
 import Data.Generics
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Language.Haskell.TH
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 914
@@ -167,29 +168,49 @@ occursInType var = goType
 -- | Assuming that we're building an instance of the form C (T v_1 ... v_(n-1)) for some GADT T, this function
 -- takes a list of the variables v_1 ... v_(n-1) used in the instance head, as well as the result type of some data
 -- constructor, say T x_1 ... x_(n-1) x_n, as well as the type t of some argument to it, and substitutes any of
--- x_i (1 <= i <= n-1) occurring in t for the corresponding v_i, taking care to avoid name capture by foralls in t.
+-- x_i (1 <= i <= n-1) occurring free in t (including in kinds) for the corresponding v_i, taking care to avoid
+-- name capture by foralls in t: a forall-bound variable whose name clashes with one of the v_i is renamed.
 substVarsWith
   :: [Name] -- Names of variables used in the instance head in argument order
   -> Type -- Result type of constructor
   -> Type -- Type of argument to the constructor
   -> Type -- Type of argument with variables substituted for instance head variables.
-substVarsWith topVars resultType argType = subst Set.empty argType
+substVarsWith topVars resultType argType = subst Map.empty argType
   where
     topVars' = reverse topVars
     AppT resultType' _indexType = resultType
-    subst :: Set Name -> Type -> Type
+
+    -- Names that a forall-bound variable must not be called, lest it capture a substituted variable.
+    avoid = Set.fromList topVars
+    -- Names that a renamed forall-bound variable must also not be called.
+    taken = Set.union avoid (Set.fromList (listify (const True :: Name -> Bool) argType))
+    fresh n = until (\n' -> not (Set.member n' taken)) prime (prime n)
+    prime n = mkName (nameBase n ++ "'")
+
+    -- Brings a telescope of binders into scope. Each binder's kind is in the scope of the earlier binders.
+    -- Returns the environment for the body, mapping each bound variable to its (possibly new) name.
+    bindAll :: Map Name Name -> [TyVarBndr_ flag] -> (Map Name Name, [TyVarBndr_ flag])
+    bindAll env [] = (env, [])
+    bindAll env (b:rest) =
+      let n = tvName b
+          n' = if Set.member n avoid then fresh n else n
+          (env', rest') = bindAll (Map.insert n n' env) rest
+      in (env', mapTVName (const n') (mapTVKind (subst env) b) : rest')
+
+    -- The environment maps each variable bound by an enclosing forall to its (possibly new) name.
+    subst :: Map Name Name -> Type -> Type
     subst bs ty = case ty of
       -- Several of the following cases could all be covered by an "x -> x" case, but
       -- I'd rather know if new cases need to be handled specially in future versions
       -- of Template Haskell.
       ForallT bndrs cxt1 t ->
-        let bs' = Set.union bs (Set.fromList (map tvName bndrs))
-        in ForallT bndrs (map (subst bs') cxt1) (subst bs' t)
+        let (bs', bndrs') = bindAll bs bndrs
+        in ForallT bndrs' (map (subst bs') cxt1) (subst bs' t)
       AppT f x -> AppT (subst bs f) (subst bs x)
-      SigT t k -> SigT (subst bs t) k
-      VarT v -> if Set.member v bs
-        then VarT v
-        else VarT (findVar v topVars' resultType')
+      SigT t k -> SigT (subst bs t) (subst bs k)
+      VarT v -> case Map.lookup v bs of
+        Just v' -> VarT v'
+        Nothing -> VarT (findVar v topVars' resultType')
       ConT n -> ConT n
       TupleT k -> TupleT k
       ArrowT -> ArrowT
@@ -223,10 +244,10 @@ substVarsWith topVars resultType argType = subst Set.empty argType
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
       MulArrowT -> MulArrowT
 #endif
-#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
+#if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 810
       ForallVisT bndrs t ->
-        let bs' = Set.union bs (Set.fromList (map tvName bndrs))
-        in ForallVisT bndrs (subst bs' t)
+        let (bs', bndrs') = bindAll bs bndrs
+        in ForallVisT bndrs' (subst bs' t)
 #endif
 #if defined (__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 808
       ImplicitParamT s t -> ImplicitParamT s (subst bs t)
