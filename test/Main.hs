@@ -7,6 +7,7 @@ import qualified Data.Set as Set
 import Gen
 import Hedgehog
 import Hedgehog.Main (defaultMain)
+import Language.Haskell.TH (mkName, nameBase)
 import Language.Haskell.TH.Extras
 
 main :: IO ()
@@ -20,6 +21,7 @@ main =
         , ("prop_kindArity", prop_kindArity)
         , ("prop_substVarsWith_refined", prop_substVarsWith_refined)
         , ("prop_namesBoundInDec", prop_namesBoundInDec)
+        , ("prop_genericalizeDecs", prop_genericalizeDecs)
         ]
     ]
 
@@ -80,3 +82,13 @@ prop_namesBoundInDec :: Property
 prop_namesBoundInDec = withTests 1000 . property $ do
   dec <- forAll genDec
   namesBoundInDec dec === decNames dec
+
+-- | 'genericalizeDecs' replaces every occurrence of every name bound at the top
+-- level of the declarations with a generic name, and leaves all other names
+-- (including fresh ones bound locally) alone.
+prop_genericalizeDecs :: Property
+prop_genericalizeDecs = withTests 1000 . property $ do
+  decs <- forAll genQuotedDecs
+  let bound = Set.fromList (concatMap decNames decs)
+      expected n = if Set.member n bound then mkName (nameBase n) else n
+  allNames (genericalizeDecs decs) === map expected (allNames decs)
