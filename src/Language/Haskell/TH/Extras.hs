@@ -15,9 +15,6 @@ import qualified Data.Set as Set
 import GHC.Exts (FUN)
 #endif
 import Language.Haskell.TH
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ < 914
-import Language.Haskell.TH.Syntax
-#endif
 import Language.Haskell.TH.Datatype.TyVarBndr
 
 intIs64 :: Bool
