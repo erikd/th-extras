@@ -17,6 +17,7 @@ main =
         , ("prop_namesBoundInPat", prop_namesBoundInPat)
         , ("prop_substVarsWith", prop_substVarsWith)
         , ("prop_headOfType", prop_headOfType)
+        , ("prop_kindArity", prop_kindArity)
         ]
     ]
 
@@ -51,3 +52,11 @@ prop_headOfType :: Property
 prop_headOfType = withTests 1000 . property $ do
   (ty, name) <- forAll genHeadedType
   headOfType ty === name
+
+-- | 'kindArity' counts every argument a kind takes, including visible
+-- dependent quantification, looking through parentheses, kind signatures and
+-- invisible foralls.
+prop_kindArity :: Property
+prop_kindArity = withTests 1000 . property $ do
+  (k, n) <- forAll genKindWithArity
+  kindArity k === n
