@@ -207,6 +207,8 @@ occursInType var = goType
 -- constructor, say T x_1 ... x_(n-1) x_n, as well as the type t of some argument to it, and substitutes any of
 -- x_i (1 <= i <= n-1) occurring free in t (including in kinds) for the corresponding v_i, taking care to avoid
 -- name capture by foralls in t: a forall-bound variable whose name clashes with one of the v_i is renamed.
+-- Free variables of t that are not among x_1 ... x_(n-1), such as existentially quantified variables or the
+-- index x_n, are left unchanged; it is up to the caller to ensure they do not share a name with any v_i.
 substVarsWith
   :: [Name] -- Names of variables used in the instance head in argument order
   -> Type -- Result type of constructor
@@ -286,8 +288,8 @@ substVarsWith topVars resultType argType = subst Map.empty argType
     findVar v (tv:_) (AppT _ (VarT v')) | v == v' = tv
     -- Skip any other parameter, which may be a variable or (in a GADT) a refined type.
     findVar v (_:tvs) (AppT t _) = findVar v tvs t
-    findVar v _ _ = error $ "substVarsWith: couldn't look up variable substitution for " ++ show v
-      ++ " with topVars: " ++ show topVars ++ " resultType: " ++ show resultType ++ " argType: " ++ show argType
+    -- Not a parameter of the result type (e.g. an existential or the index): leave it alone.
+    findVar v _ _ = v
 
 -- | Determine the arity of a kind.
 -- Starting in template-haskell 2.8.0.0, 'Kind' and 'Type' became synonymous.
