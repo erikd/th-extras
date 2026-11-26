@@ -150,21 +150,29 @@ headOfType (UnboxedTupleT n) = unboxedTupleTypeName n
 headOfType ty = error $ "headOfType: Unhandled type: " ++ show ty
 #endif
 
+-- | Determines whether a type variable occurs free in a type, including in kinds and contexts.
+-- Binders in a 'forall' telescope scope over the kinds of later binders and over the body.
 occursInType :: Name -> Type -> Bool
-occursInType var ty = case ty of
-        ForallT bndrs _ ty'
-            | any (var ==) (map tvName bndrs)
-                -> False
-            | otherwise
-                -> occursInType var ty'
-        VarT name
-            | name == var -> True
-            | otherwise   -> False
-        AppT ty1 ty2 -> occursInType var ty1 || occursInType var ty2
-#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 612
-        SigT ty' _ -> occursInType var ty'
+occursInType var = goType
+  where
+    goType :: Type -> Bool
+    goType ty = case ty of
+        VarT name -> name == var
+        ForallT bndrs cxt1 ty' -> goBndrs [(tvName b, goData b) | b <- bndrs] (any goType cxt1 || goType ty')
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 810
+        ForallVisT bndrs ty' -> goBndrs [(tvName b, goData b) | b <- bndrs] (goType ty')
 #endif
-        _ -> False
+        -- Every other constructor binds nothing, so just look at all of its sub-terms.
+        _ -> or (gmapQ goData ty)
+
+    goData :: Data d => d -> Bool
+    goData d = case cast d of
+        Just ty -> goType ty
+        Nothing -> or (gmapQ goData d)
+
+    -- Each binder is given as its name and whether 'var' occurs in its kind.
+    goBndrs :: [(Name, Bool)] -> Bool -> Bool
+    goBndrs bndrs body = foldr (\(name, inKind) rest -> inKind || (name /= var && rest)) body bndrs
 
 -- | Assuming that we're building an instance of the form C (T v_1 ... v_(n-1)) for some GADT T, this function
 -- takes a list of the variables v_1 ... v_(n-1) used in the instance head, as well as the result type of some data
