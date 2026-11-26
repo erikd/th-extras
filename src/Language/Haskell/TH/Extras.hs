@@ -316,7 +316,9 @@ substVarsWith topVars resultType argType = subst Map.empty argType
 kindArity :: Kind -> Int
 kindArity k = case k of
   ForallT _ _ t -> kindArity t
-  AppT (AppT ArrowT _) t -> 1 + kindArity t
+  AppT f t | isArrowApp f -> 1 + kindArity t
+  InfixT _ n t | n == ''(->) -> 1 + kindArity t
+  UInfixT _ n t | n == ''(->) -> 1 + kindArity t
   SigT t _ -> kindArity t
   ParensT t -> kindArity t
 #if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 810
@@ -324,6 +326,24 @@ kindArity k = case k of
   ForallVisT bndrs t -> length bndrs + kindArity t
 #endif
   _ -> 0
+  where
+    -- Is this an arrow applied to its argument, i.e. the @(->) arg@ in @arg -> result@?
+    isArrowApp t = case t of
+      AppT arrow _ -> isArrow arrow
+      ParensT t' -> isArrowApp t'
+      SigT t' _ -> isArrowApp t'
+      _ -> False
+
+    isArrow t = case t of
+      ArrowT -> True
+      ConT n -> n == ''(->)
+#if defined(__GLASGOW_HASKELL__) && __GLASGOW_HASKELL__ >= 900
+      -- A multiplicity arrow applied to its multiplicity, as in arg %m -> result.
+      AppT MulArrowT _ -> True
+#endif
+      ParensT t' -> isArrow t'
+      SigT t' _ -> isArrow t'
+      _ -> False
 
 -- | Given the name of a type constructor, determine its full arity
 tyConArity :: Name -> Q Int
