@@ -23,6 +23,7 @@ main =
         , ("prop_namesBoundInDec", prop_namesBoundInDec)
         , ("prop_genericalizeDecs", prop_genericalizeDecs)
         , ("prop_headOfType_builtin", prop_headOfType_builtin)
+        , ("prop_substVarsWith_existential", prop_substVarsWith_existential)
         ]
     ]
 
@@ -50,6 +51,12 @@ prop_substVarsWith = withTests 1000 . property $ checkSubstCase =<< forAll genSu
 -- some of the type constructor's parameters to concrete types.
 prop_substVarsWith_refined :: Property
 prop_substVarsWith_refined = withTests 1000 . property $ checkSubstCase =<< forAll genRefinedSubstCase
+
+-- | As 'prop_substVarsWith', but the argument type also mentions existential
+-- variables and the index variable, which are not parameters of the result
+-- type and so must be left unchanged.
+prop_substVarsWith_existential :: Property
+prop_substVarsWith_existential = withTests 1000 . property $ checkSubstCase =<< forAll genExistentialSubstCase
 
 checkSubstCase :: SubstCase -> PropertyT IO ()
 checkSubstCase sc = do

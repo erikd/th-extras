@@ -12,6 +12,7 @@ module Gen
   , SubstCase (..)
   , genSubstCase
   , genRefinedSubstCase
+  , genExistentialSubstCase
   , genHeadedType
   , genBuiltinHeadedType
   , genKindWithArity
@@ -224,6 +225,17 @@ genSubstCase = genSubstCaseWith (Range.singleton 0)
 -- @C :: T Int b i@.
 genRefinedSubstCase :: Gen SubstCase
 genRefinedSubstCase = genSubstCaseWith (Range.linear 1 3)
+
+-- | Like 'genSubstCase', but the argument type also mentions variables that are
+-- not parameters of the result type, which the substitution must leave alone:
+-- existentially quantified variables (whose binders 'argTypesOfCon' discards)
+-- and the GADT index variable @i@. Their names are distinct from every instance
+-- head variable, so leaving them alone cannot conflate them with one.
+genExistentialSubstCase :: Gen SubstCase
+genExistentialSubstCase = do
+  sc <- genSubstCaseWith (Range.linear 0 2)
+  others <- Gen.filter (not . null) (Gen.subsequence (map mkName ["e1", "e2", "i"]))
+  pure sc { scArgType = foldl AppT (scArgType sc) (map VarT others) }
 
 -- | The range is the number of parameters of the result type that are refined
 -- to concrete types rather than being variables.
